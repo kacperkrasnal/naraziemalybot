@@ -1,21 +1,12 @@
 import "dotenv/config";
-import {
-  Client,
-  GatewayIntentBits,
-  REST,
-  Routes,
-  SlashCommandBuilder,
-} from "discord.js";
+import { Client, GatewayIntentBits } from "discord.js";
 
 const token = process.env.DISCORD_TOKEN;
-const clientId = process.env.CLIENT_ID;
-const guildId = process.env.GUILD_ID;
 
-if (!token || !clientId || !guildId) {
-  throw new Error("Brakuje DISCORD_TOKEN / CLIENT_ID / GUILD_ID w .env");
+if (!token) {
+  throw new Error("Brakuje DISCORD_TOKEN w .env");
 }
 
-// klient bota
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -24,28 +15,10 @@ const client = new Client({
   ],
 });
 
-// komenda /ping
-const commands = [
-  new SlashCommandBuilder()
-    .setName("ping")
-    .setDescription("Sprawdza czy bot żyje"),
-].map((cmd) => cmd.toJSON());
-
-// rejestracja slash komendy na serwerze (dev)
-const rest = new REST({ version: "10" }).setToken(token);
-await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
-  body: commands,
-});
-
 client.once("ready", () => {
-  if (!client.user) {
-    console.log("Bot zalogowany, ale client.user jest null (dziwne 🤔)");
-    return;
-  }
-  console.log(`🤖 Zalogowano jako ${client.user.tag}`);
+  console.log(`🤖 Zalogowano jako ${client.user!.tag}`);
 });
 
-// !ping (klasyczna komenda)
 client.on("messageCreate", (message) => {
   if (message.author.bot) return;
   if (message.content === "!ping") {
@@ -53,9 +26,9 @@ client.on("messageCreate", (message) => {
   }
 });
 
-// /ping
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+
   if (interaction.commandName === "ping") {
     await interaction.reply("pong 🏓");
   }
