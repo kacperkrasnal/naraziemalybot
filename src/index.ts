@@ -1,5 +1,11 @@
 import "dotenv/config";
-import { Client, GatewayIntentBits } from "discord.js";
+import {
+  ChannelType,
+  Client,
+  GatewayIntentBits,
+  TextBasedChannel,
+} from "discord.js";
+import { FORUM_CHANNEL_ID, ANNOUNCE_CHANNEL_ID } from "./config.js";
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -17,6 +23,23 @@ const client = new Client({
 
 client.once("ready", () => {
   console.log(`🤖 Zalogowano jako ${client.user!.tag}`);
+});
+
+client.on("threadCreate", async (thread) => {
+  if (thread.parentId !== FORUM_CHANNEL_ID) return;
+
+  const parent = thread.parent;
+  if (!parent || parent.type !== ChannelType.GuildForum) return;
+
+  const announceChannel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
+  if (!announceChannel) {
+    console.error("Nie można znaleźć kanału o id: " + ANNOUNCE_CHANNEL_ID);
+    return;
+  }
+
+  if (announceChannel.type === ChannelType.GuildText) {
+    await announceChannel.send(`🆕 nowa sesja: ${thread.url}`);
+  }
 });
 
 client.on("messageCreate", (message) => {
