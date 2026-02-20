@@ -1,17 +1,10 @@
 import "dotenv/config";
-import {
-  ChannelType,
-  Client,
-  GatewayIntentBits,
-  TextBasedChannel,
-} from "discord.js";
-import { FORUM_CHANNEL_ID, ANNOUNCE_CHANNEL_ID } from "./config.js";
+import { Client, GatewayIntentBits } from "discord.js";
+import { registerForumHandlers } from "./functions/forum.js";
+import { registerOtherHandlers } from "./functions/other.js";
+import { getEnv } from "./utils.js";
 
-const token = process.env.DISCORD_TOKEN;
-
-if (!token) {
-  throw new Error("Brakuje DISCORD_TOKEN w .env");
-}
+const token = getEnv("DISCORD_TOKEN", true);
 
 const client = new Client({
   intents: [
@@ -22,39 +15,10 @@ const client = new Client({
 });
 
 client.once("ready", () => {
-  console.log(`🤖 Zalogowano jako ${client.user!.tag}`);
+  console.log(`🤖 Logged in as ${client.user!.tag}`);
 });
 
-client.on("threadCreate", async (thread) => {
-  if (thread.parentId !== FORUM_CHANNEL_ID) return;
-
-  const parent = thread.parent;
-  if (!parent || parent.type !== ChannelType.GuildForum) return;
-
-  const announceChannel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
-  if (!announceChannel) {
-    console.error("Nie można znaleźć kanału o id: " + ANNOUNCE_CHANNEL_ID);
-    return;
-  }
-
-  if (announceChannel.type === ChannelType.GuildText) {
-    await announceChannel.send(`🆕 nowa sesja: ${thread.url}`);
-  }
-});
-
-client.on("messageCreate", (message) => {
-  if (message.author.bot) return;
-  if (message.content === "!ping") {
-    message.reply("pong 🏓");
-  }
-});
-
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  if (interaction.commandName === "ping") {
-    await interaction.reply("pong 🏓");
-  }
-});
+registerForumHandlers(client);
+registerOtherHandlers(client);
 
 client.login(token);

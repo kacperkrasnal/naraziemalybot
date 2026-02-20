@@ -1,18 +1,15 @@
 import "dotenv/config";
 import { REST, Routes, SlashCommandBuilder } from "discord.js";
+import { getEnv } from "./utils";
 
-const token = process.env.DISCORD_TOKEN;
-const clientId = process.env.CLIENT_ID;
-const guildId = process.env.GUILD_ID;
-
-if (!token || !clientId || !guildId) {
-  throw new Error("Brakuje DISCORD_TOKEN / CLIENT_ID / GUILD_ID w .env");
-}
+const token = getEnv("DISCORD_TOKEN", true);
+const clientId = getEnv("CLIENT_ID", true);
+const guildId = getEnv("GUILD_ID", true);
 
 const commands = [
   new SlashCommandBuilder()
     .setName("ping")
-    .setDescription("Sprawdza czy bot żyje"),
+    .setDescription("Checks if the bot is alive"),
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(token);
@@ -21,4 +18,4 @@ await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
   body: commands,
 });
 
-console.log("✅ Zarejestrowano komendy slash (guild).");
+console.log("✅ Slash commands successfully registered (guild).");
