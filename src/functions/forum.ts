@@ -64,14 +64,6 @@ export function registerForumHandlers(client: Client) {
   });
 }
 
-async function safeFetchStarterMessage(thread: AnyThreadChannel) {
-  try {
-    return await thread.fetchStarterMessage();
-  } catch {
-    return null;
-  }
-}
-
 function hasTag(thread: AnyThreadChannel, tagId: string) {
   return Boolean(tagId) && thread.appliedTags.includes(tagId);
 }
