@@ -2,14 +2,15 @@ import {
   AnyThreadChannel,
   ChannelType,
   ForumChannel,
-  Snowflake,
+  type Snowflake,
+  type TextChannel,
 } from "discord.js";
+
 import {
-  PendingTagUpdate,
   pendingTagUpdates,
-  TagAction,
-  ThreadCopy,
-  ThreadKind,
+  type TagAction,
+  type ThreadCopy,
+  type ThreadKind,
 } from "../types.js";
 import {
   ACTIVE_TAG_ID,
@@ -24,6 +25,37 @@ import {
 } from "../ids.js";
 import { hasTag } from "../utils.js";
 import { TAG_UPDATE_COOLDOWN_MS } from "./config.js";
+import {
+  buildActiveUpdate,
+  buildInactiveUpdate,
+  buildLookingForPlayersUpdate,
+  buildTemporaryInactiveUpdate,
+} from "./messages.js";
+
+/* ──────────────────────────────────────────────────────────────
+ * Forum guards
+ * ────────────────────────────────────────────────────────────── */
+
+export function getForumParent(thread: AnyThreadChannel) {
+  if (thread.parentId !== FORUM_CHANNEL_ID) return null;
+
+  const parent = thread.parent;
+  if (!parent || parent.type !== ChannelType.GuildForum) return null;
+
+  return parent;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * Thread kind + copy (label/emoji/recruitment)
+ * ────────────────────────────────────────────────────────────── */
+
+export function getThreadKind(thread: AnyThreadChannel): ThreadKind {
+  if (hasTag(thread, CAMPAIGN_TAG_ID) || hasTag(thread, SERVER_CAMPAIGN_TAG_ID))
+    return "campaign";
+  if (hasTag(thread, ONESHOT_TAG_ID)) return "oneshot";
+  if (hasTag(thread, ADVENTURE_TAG_ID)) return "adventure";
+  return "session";
+}
 
 export function getCopyForKind(
   parent: ForumChannel,
@@ -34,8 +66,6 @@ export function getCopyForKind(
       return {
         label: "kampania",
         emoji: tagEmoji(parent, CAMPAIGN_TAG_ID),
-        nowyNowa: "nowa",
-        któryKtóra: "która",
         recruitmentNoun: "tej kampanii",
       };
 
@@ -43,8 +73,6 @@ export function getCopyForKind(
       return {
         label: "oneshot",
         emoji: tagEmoji(parent, ONESHOT_TAG_ID),
-        nowyNowa: "nowy",
-        któryKtóra: "który",
         recruitmentNoun: "tego oneshota",
       };
 
@@ -52,8 +80,6 @@ export function getCopyForKind(
       return {
         label: "przygoda",
         emoji: tagEmoji(parent, ADVENTURE_TAG_ID),
-        nowyNowa: "nowa",
-        któryKtóra: "która",
         recruitmentNoun: "tej przygody",
       };
 
@@ -61,8 +87,6 @@ export function getCopyForKind(
       return {
         label: "sesja",
         emoji: "",
-        nowyNowa: "nowa",
-        któryKtóra: "która",
         recruitmentNoun: "tej sesji",
       };
   }
@@ -76,8 +100,10 @@ export function tagEmoji(parent: ForumChannel, tagId: string): string {
 
   const e = tag.emoji;
 
+  // unicode emoji
   if (!e.id && e.name) return `${e.name} `;
 
+  // custom emoji
   if (e.id) {
     const name = e.name ?? "emoji";
     const animated = (e as any).animated ? "a" : "";
@@ -87,50 +113,9 @@ export function tagEmoji(parent: ForumChannel, tagId: string): string {
   return "";
 }
 
-export function getTypeLabel(
-  parent: ForumChannel,
-  flags: { isOneshot: boolean; isCampaign: boolean; isAdventure: boolean },
-): { label: string; emoji: string } {
-  const { isOneshot, isCampaign, isAdventure } = flags;
-
-  if (isCampaign) {
-    return {
-      label: "kampania",
-      emoji: tagEmoji(parent, CAMPAIGN_TAG_ID),
-    };
-  }
-
-  if (isOneshot) {
-    return {
-      label: "oneshot",
-      emoji: tagEmoji(parent, ONESHOT_TAG_ID),
-    };
-  }
-
-  if (isAdventure) {
-    return {
-      label: "przygoda",
-      emoji: tagEmoji(parent, ADVENTURE_TAG_ID),
-    };
-  }
-
-  return {
-    label: "sesja",
-    emoji: "",
-  };
-}
-
-export function getThreadKind(thread: AnyThreadChannel): ThreadKind {
-  if (hasTag(thread, CAMPAIGN_TAG_ID) || hasTag(thread, SERVER_CAMPAIGN_TAG_ID))
-    return "campaign";
-  if (hasTag(thread, ONESHOT_TAG_ID)) return "oneshot";
-  if (hasTag(thread, ADVENTURE_TAG_ID)) return "adventure";
-  return "session";
-}
-
-export function isLookingForPlayers(thread: AnyThreadChannel): boolean {
-  return hasTag(thread, LOOKING_FOR_PLAYERS_TAG_ID);
-}
+/* ──────────────────────────────────────────────────────────────
+ * Attachments / images
+ * ────────────────────────────────────────────────────────────── */
 
 export function pickFirstImageUrl(
   attachments: Map<Snowflake, any> | undefined,
@@ -140,7 +125,6 @@ export function pickFirstImageUrl(
   for (const [, att] of attachments) {
     const contentType: string | undefined = att.contentType;
     const url: string | undefined = att.url;
-
     if (!url) continue;
 
     if (contentType?.startsWith("image/")) return url;
@@ -148,6 +132,17 @@ export function pickFirstImageUrl(
   }
 
   return null;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * Tag diff helpers + prioritization
+ * ────────────────────────────────────────────────────────────── */
+
+export function sameTags(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const as = new Set(a);
+  for (const x of b) if (!as.has(x)) return false;
+  return true;
 }
 
 export function tagAdded(
@@ -159,31 +154,27 @@ export function tagAdded(
   return !oldTags.includes(tagId) && newTags.includes(tagId);
 }
 
-export function sameTags(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const as = new Set(a);
-  for (const x of b) if (!as.has(x)) return false;
-  return true;
-}
-
-export function pickActionKey(flags: {
-  lfpAdded: boolean;
-  activeAdded: boolean;
-  inactiveAdded: boolean;
-  tempInactiveAdded: boolean;
-}): "lfp" | "active" | "inactive" | "tempInactive" | null {
-  if (flags.lfpAdded) return "lfp";
-  if (flags.activeAdded) return "active";
-  if (flags.inactiveAdded) return "inactive";
-  if (flags.tempInactiveAdded) return "tempInactive";
+/**
+ * Returns the highest priority action based on which tags were ADDED.
+ * Priority: lfp > active > inactive > tempInactive
+ */
+export function getHighestPriorityAddedAction(
+  baseTags: string[],
+  currentTags: string[],
+): TagAction | null {
+  if (tagAdded(baseTags, currentTags, LOOKING_FOR_PLAYERS_TAG_ID)) return "lfp";
+  if (tagAdded(baseTags, currentTags, ACTIVE_TAG_ID)) return "active";
+  if (tagAdded(baseTags, currentTags, INACTIVE_TAG_ID)) return "inactive";
+  if (tagAdded(baseTags, currentTags, TEMPORARY_INACTIVE_TAG_ID))
+    return "tempInactive";
   return null;
 }
 
-export function saveLastSent(
-  threadId: string,
-  key: PendingTagUpdate["lastSentKey"],
-  at: number,
-) {
+/* ──────────────────────────────────────────────────────────────
+ * Cooldown bookkeeping (anti-spam)
+ * ────────────────────────────────────────────────────────────── */
+
+export function saveLastSent(threadId: string, key: TagAction, at: number) {
   const existing = pendingTagUpdates.get(threadId);
   if (existing) {
     existing.lastSentKey = key;
@@ -203,23 +194,57 @@ export function saveLastSent(
   });
 }
 
-export function getForumParent(thread: AnyThreadChannel) {
-  if (thread.parentId !== FORUM_CHANNEL_ID) return null;
+/* ──────────────────────────────────────────────────────────────
+ * Sending helpers
+ * ────────────────────────────────────────────────────────────── */
 
-  const parent = thread.parent;
-  if (!parent || parent.type !== ChannelType.GuildForum) return null;
+export async function sendTagUpdateAction(
+  announceChannel: TextChannel,
+  thread: AnyThreadChannel,
+  embed: any,
+  action: TagAction,
+  now: number,
+) {
+  if (action === "lfp") {
+    const content = buildLookingForPlayersUpdate(thread);
+    await announceChannel.send({
+      content,
+      embeds: [embed],
+      allowedMentions: { parse: ["everyone"] },
+    });
+    saveLastSent(thread.id, action, now);
+    return;
+  }
 
-  return parent;
-}
+  if (action === "active") {
+    const content = buildActiveUpdate(thread);
+    await announceChannel.send({
+      content,
+      embeds: [embed],
+      allowedMentions: { parse: ["users"] },
+    });
+    saveLastSent(thread.id, action, now);
+    return;
+  }
 
-export function getHighestPriorityAddedAction(
-  baseTags: string[],
-  currentTags: string[],
-): TagAction | null {
-  if (tagAdded(baseTags, currentTags, LOOKING_FOR_PLAYERS_TAG_ID)) return "lfp";
-  if (tagAdded(baseTags, currentTags, ACTIVE_TAG_ID)) return "active";
-  if (tagAdded(baseTags, currentTags, INACTIVE_TAG_ID)) return "inactive";
-  if (tagAdded(baseTags, currentTags, TEMPORARY_INACTIVE_TAG_ID))
-    return "tempInactive";
-  return null;
+  if (action === "inactive") {
+    const content = buildInactiveUpdate(thread);
+    await announceChannel.send({
+      content,
+      embeds: [embed],
+      allowedMentions: { parse: ["users"] },
+    });
+    saveLastSent(thread.id, action, now);
+    return;
+  }
+
+  {
+    const content = buildTemporaryInactiveUpdate(thread);
+    await announceChannel.send({
+      content,
+      embeds: [embed],
+      allowedMentions: { parse: ["users"] },
+    });
+    saveLastSent(thread.id, action, now);
+  }
 }

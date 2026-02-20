@@ -10,24 +10,51 @@ import {
   getForumParent,
   pickFirstImageUrl,
   sameTags,
-  saveLastSent,
+  sendTagUpdateAction,
 } from "./utils.js";
 import { ANNOUNCE_CHANNEL_ID } from "../ids.js";
-import {
-  buildActiveUpdate,
-  buildAnnouncementMessage,
-  buildInactiveUpdate,
-  buildLookingForPlayersUpdate,
-  buildTemporaryInactiveUpdate,
-  buildThreadEmbed,
-} from "./messages.js";
+import { buildAnnouncementMessage, buildThreadEmbed } from "./messages.js";
 import { pendingTagUpdates } from "../types.js";
 import { TAG_UPDATE_COOLDOWN_MS, TAG_UPDATE_DEBOUNCE_MS } from "./config.js";
+
+/* ──────────────────────────────────────────────────────────────
+ * Public registration
+ * ────────────────────────────────────────────────────────────── */
 
 export function registerForumHandlers(client: Client) {
   client.on("threadCreate", async (thread) => {
     const parent = getForumParent(thread);
     if (!parent) return;
+
+    const announceChannel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
+    if (!announceChannel) {
+      console.error(
+        `Channel with ID ${ANNOUNCE_CHANNEL_ID} could not be found`,
+      );
+      return;
+    }
+
+    if (announceChannel.type !== ChannelType.GuildText) return;
+
+    const initialThreadMessage = (await thread.messages.fetch()).first();
+    const initialThreadContent = initialThreadMessage?.content || "";
+    const initialThreadAttachments = initialThreadMessage?.attachments;
+
+    const content = `@everyone\n${buildAnnouncementMessage(thread)}`;
+
+    const embed = buildThreadEmbed(
+      thread,
+      initialThreadContent,
+      pickFirstImageUrl(initialThreadAttachments),
+    );
+
+    await announceChannel.send({
+      content,
+      embeds: [embed],
+      allowedMentions: {
+        parse: ["users", "everyone"],
+      },
+    });
     await handleThreadCreate(client, thread);
   });
 
@@ -38,34 +65,15 @@ export function registerForumHandlers(client: Client) {
   });
 }
 
-async function handleThreadCreate(client: Client, thread: AnyThreadChannel) {
-  const announceChannel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
-  if (!announceChannel) {
-    console.error(`Channel with ID ${ANNOUNCE_CHANNEL_ID} could not be found`);
-    return;
-  }
-  if (announceChannel.type !== ChannelType.GuildText) return;
+/* ──────────────────────────────────────────────────────────────
+ * Thread create
+ * ────────────────────────────────────────────────────────────── */
 
-  const initialThreadMessage = (await thread.messages.fetch()).first();
-  const initialThreadContent = initialThreadMessage?.content || "";
-  const initialThreadAttachments = initialThreadMessage?.attachments;
+async function handleThreadCreate(client: Client, thread: AnyThreadChannel) {}
 
-  const content = `@everyone\n${buildAnnouncementMessage(thread)}`;
-
-  const embed = buildThreadEmbed(
-    thread,
-    initialThreadContent,
-    pickFirstImageUrl(initialThreadAttachments),
-  );
-
-  await announceChannel.send({
-    content,
-    embeds: [embed],
-    allowedMentions: {
-      parse: ["users", "everyone"],
-    },
-  });
-}
+/* ──────────────────────────────────────────────────────────────
+ * Thread tag updates (debounce + cooldown)
+ * ────────────────────────────────────────────────────────────── */
 
 function handleThreadTagUpdate(
   client: Client,
@@ -123,49 +131,7 @@ function handleThreadTagUpdate(
       pickFirstImageUrl(initialThreadAttachments),
     );
 
-    if (action === "lfp") {
-      const content = buildLookingForPlayersUpdate(fresh);
-      await announceChannel.send({
-        content,
-        embeds: [embed],
-        allowedMentions: { parse: ["everyone"] },
-      });
-      saveLastSent(thread.id, action, now);
-      return;
-    }
-
-    if (action === "active") {
-      const content = buildActiveUpdate(fresh);
-      await announceChannel.send({
-        content,
-        embeds: [embed],
-        allowedMentions: { parse: ["users"] },
-      });
-      saveLastSent(thread.id, action, now);
-      return;
-    }
-
-    if (action === "inactive") {
-      const content = buildInactiveUpdate(fresh);
-      await announceChannel.send({
-        content,
-        embeds: [embed],
-        allowedMentions: { parse: ["users"] },
-      });
-      saveLastSent(thread.id, action, now);
-      return;
-    }
-
-    if (action === "tempInactive") {
-      const content = buildTemporaryInactiveUpdate(fresh);
-      await announceChannel.send({
-        content,
-        embeds: [embed],
-        allowedMentions: { parse: ["users"] },
-      });
-      saveLastSent(thread.id, action, now);
-      return;
-    }
+    await sendTagUpdateAction(announceChannel, fresh, embed, action, now);
   }, TAG_UPDATE_DEBOUNCE_MS);
 
   pendingTagUpdates.set(thread.id, {

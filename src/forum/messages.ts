@@ -1,16 +1,17 @@
 import { AnyThreadChannel, EmbedBuilder, ForumChannel } from "discord.js";
-import {
-  getCopyForKind,
-  getThreadKind,
-  isLookingForPlayers,
-  tagEmoji,
-} from "./utils.js";
+
 import {
   ACTIVE_TAG_ID,
   INACTIVE_TAG_ID,
   LOOKING_FOR_PLAYERS_TAG_ID,
   TEMPORARY_INACTIVE_TAG_ID,
 } from "../ids.js";
+import { hasTag } from "../utils.js";
+import { getCopyForKind, getThreadKind, tagEmoji } from "./utils.js";
+
+/* ──────────────────────────────────────────────────────────────
+ * Embeds
+ * ────────────────────────────────────────────────────────────── */
 
 export function buildThreadEmbed(
   thread: AnyThreadChannel,
@@ -37,17 +38,19 @@ export function buildThreadEmbed(
   return embed;
 }
 
+/* ──────────────────────────────────────────────────────────────
+ * Messages: create
+ * ────────────────────────────────────────────────────────────── */
+
 export function buildAnnouncementMessage(thread: AnyThreadChannel): string {
   const parent = thread.parent as ForumChannel;
   const threadOwnerMention = `<@${thread.ownerId}>`;
+  const threadLink = `[${thread.name}](${thread.url})`;
 
   const kind = getThreadKind(thread);
-  const lookingForPlayers = isLookingForPlayers(thread);
 
-  const { label, emoji, nowyNowa, któryKtóra, recruitmentNoun } =
-    getCopyForKind(parent, kind);
-
-  const threadLink = `[${thread.name}](${thread.url})`;
+  const { label, emoji, recruitmentNoun } = getCopyForKind(parent, kind);
+  const { nowyNowa, któryKtóra } = introGrammarForKind(kind);
 
   const lines: string[] = [];
 
@@ -55,7 +58,7 @@ export function buildAnnouncementMessage(thread: AnyThreadChannel): string {
     `Właśnie wleciała ${nowyNowa} **${label}${emoji}**! ${któryKtóra} poprowadzi ${threadOwnerMention}.`,
   );
 
-  if (lookingForPlayers) {
+  if (hasTag(thread, LOOKING_FOR_PLAYERS_TAG_ID)) {
     lines.push(
       `🎯 Właśnie trwają nabory do ${recruitmentNoun} — aby się zgłosić wejdź na **${threadLink}** i napisz *"Zgłaszam się!"*`,
     );
@@ -64,12 +67,14 @@ export function buildAnnouncementMessage(thread: AnyThreadChannel): string {
   return lines.join("\n");
 }
 
-/**
- * 1. Zmiana na LOOKING_FOR_PLAYERS -> ping @everyone
- */
+/* ──────────────────────────────────────────────────────────────
+ * Messages: tag updates
+ * ────────────────────────────────────────────────────────────── */
+
 export function buildLookingForPlayersUpdate(thread: AnyThreadChannel): string {
   const parent = thread.parent as ForumChannel;
   const threadLink = `[${thread.name}](${thread.url})`;
+
   return [
     "@everyone",
     "Szukasz sesji? Mamy coś dla Ciebie!",
@@ -77,9 +82,6 @@ export function buildLookingForPlayersUpdate(thread: AnyThreadChannel): string {
   ].join("\n");
 }
 
-/**
- * 2. ACTIVE
- */
 export function buildActiveUpdate(thread: AnyThreadChannel): string {
   const parent = thread.parent as ForumChannel;
   const threadOwnerMention = `<@${thread.ownerId}>`;
@@ -87,14 +89,11 @@ export function buildActiveUpdate(thread: AnyThreadChannel): string {
   const kind = getThreadKind(thread);
   const { label, emoji } = getCopyForKind(parent, kind);
 
-  const { prowadzon, aktywn } = grammarForKind(kind);
+  const { prowadzon, aktywn } = statusGrammarForKind(kind);
 
   return `${emoji}${label} **${thread.name}** prowadzon${prowadzon} przez ${threadOwnerMention} właśnie jest aktywn${aktywn}! ${tagEmoji(parent, ACTIVE_TAG_ID)}`;
 }
 
-/**
- * 3. INACTIVE
- */
 export function buildInactiveUpdate(thread: AnyThreadChannel): string {
   const parent = thread.parent as ForumChannel;
   const threadOwnerMention = `<@${thread.ownerId}>`;
@@ -102,14 +101,11 @@ export function buildInactiveUpdate(thread: AnyThreadChannel): string {
   const kind = getThreadKind(thread);
   const { label, emoji } = getCopyForKind(parent, kind);
 
-  const { prowadzon, zakonczyl } = grammarForKind(kind);
+  const { prowadzon, zakonczyl } = statusGrammarForKind(kind);
 
   return `${emoji}${label} **${thread.name}** prowadzon${prowadzon} przez ${threadOwnerMention} właśnie się zakończy${zakonczyl}! ${tagEmoji(parent, INACTIVE_TAG_ID)}`;
 }
 
-/**
- * 4. TEMPORARY_INACTIVE
- */
 export function buildTemporaryInactiveUpdate(thread: AnyThreadChannel): string {
   const parent = thread.parent as ForumChannel;
   const threadOwnerMention = `<@${thread.ownerId}>`;
@@ -117,25 +113,41 @@ export function buildTemporaryInactiveUpdate(thread: AnyThreadChannel): string {
   const kind = getThreadKind(thread);
   const { label, emoji } = getCopyForKind(parent, kind);
 
-  const { prowadzon, przestal, aktywn } = grammarForKind(kind);
+  const { prowadzon, przestal, aktywn } = statusGrammarForKind(kind);
 
   return `${emoji}${label} **${thread.name}** prowadzon${prowadzon} przez ${threadOwnerMention} właśnie zosta${przestal} zawieszon${aktywn}! ${tagEmoji(parent, TEMPORARY_INACTIVE_TAG_ID)}`;
 }
 
-/**
- * oneshot -> męski, reszta -> żeński (kampania/przygoda/sesja)
- */
-function grammarForKind(kind: ReturnType<typeof getThreadKind>): {
+/* ──────────────────────────────────────────────────────────────
+ * Grammar helpers
+ * ────────────────────────────────────────────────────────────── */
+
+function isMasculine(kind: ReturnType<typeof getThreadKind>) {
+  return kind === "oneshot";
+}
+
+function statusGrammarForKind(kind: ReturnType<typeof getThreadKind>): {
   prowadzon: "y" | "a";
   aktywn: "y" | "a";
   zakonczyl: "ł" | "ła";
   przestal: "ł" | "ła";
 } {
-  const masculine = kind === "oneshot";
+  const masculine = isMasculine(kind);
   return {
     prowadzon: masculine ? "y" : "a",
     aktywn: masculine ? "y" : "a",
     zakonczyl: masculine ? "ł" : "ła",
     przestal: masculine ? "ł" : "ła",
+  };
+}
+
+function introGrammarForKind(kind: ReturnType<typeof getThreadKind>): {
+  nowyNowa: "nowy" | "nowa";
+  któryKtóra: "który" | "która";
+} {
+  const masculine = isMasculine(kind);
+  return {
+    nowyNowa: masculine ? "nowy" : "nowa",
+    któryKtóra: masculine ? "który" : "która",
   };
 }
