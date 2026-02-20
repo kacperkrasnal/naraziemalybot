@@ -1,0 +1,2 @@
+export const TAG_UPDATE_DEBOUNCE_MS = 2500;
+export const TAG_UPDATE_COOLDOWN_MS = 60_000;

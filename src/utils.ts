@@ -1,3 +1,5 @@
+import { AnyThreadChannel } from "discord.js";
+
 export function getEnv(name: string, required: boolean = false): string {
   const value = process.env[name];
 
@@ -11,4 +13,8 @@ export function getEnv(name: string, required: boolean = false): string {
   }
 
   return value;
+}
+
+export function hasTag(thread: AnyThreadChannel, tagId: string) {
+  return Boolean(tagId) && thread.appliedTags.includes(tagId);
 }

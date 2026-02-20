@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { REST, Routes, SlashCommandBuilder } from "discord.js";
-import { getEnv } from "./utils";
+import { getEnv } from "./utils.js";
 
 const token = getEnv("DISCORD_TOKEN", true);
 const clientId = getEnv("CLIENT_ID", true);

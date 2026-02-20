@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { Client, GatewayIntentBits } from "discord.js";
-import { registerForumHandlers } from "./functions/forum.js";
-import { registerOtherHandlers } from "./functions/other.js";
+import { registerForumHandlers } from "./forum/services.js";
+import { registerOtherHandlers } from "./other.js";
 import { getEnv } from "./utils.js";
 
 const token = getEnv("DISCORD_TOKEN", true);
