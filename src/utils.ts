@@ -18,3 +18,7 @@ export function getEnv(name: string, required: boolean = false): string {
 export function hasTag(thread: AnyThreadChannel, tagId: string) {
   return Boolean(tagId) && thread.appliedTags.includes(tagId);
 }
+
+export function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

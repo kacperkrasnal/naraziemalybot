@@ -16,6 +16,7 @@ import { ANNOUNCE_CHANNEL_ID } from "../ids.js";
 import { buildAnnouncementMessage, buildThreadEmbed } from "./messages.js";
 import { pendingTagUpdates } from "../types.js";
 import { TAG_UPDATE_COOLDOWN_MS, TAG_UPDATE_DEBOUNCE_MS } from "./config.js";
+import { sleep } from "../utils.js";
 
 /* ──────────────────────────────────────────────────────────────
  * Public registration
@@ -25,36 +26,6 @@ export function registerForumHandlers(client: Client) {
   client.on("threadCreate", async (thread) => {
     const parent = getForumParent(thread);
     if (!parent) return;
-
-    const announceChannel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
-    if (!announceChannel) {
-      console.error(
-        `Channel with ID ${ANNOUNCE_CHANNEL_ID} could not be found`,
-      );
-      return;
-    }
-
-    if (announceChannel.type !== ChannelType.GuildText) return;
-
-    const initialThreadMessage = (await thread.messages.fetch()).first();
-    const initialThreadContent = initialThreadMessage?.content || "";
-    const initialThreadAttachments = initialThreadMessage?.attachments;
-
-    const content = `@everyone\n${buildAnnouncementMessage(thread)}`;
-
-    const embed = buildThreadEmbed(
-      thread,
-      initialThreadContent,
-      pickFirstImageUrl(initialThreadAttachments),
-    );
-
-    await announceChannel.send({
-      content,
-      embeds: [embed],
-      allowedMentions: {
-        parse: ["users", "everyone"],
-      },
-    });
     await handleThreadCreate(client, thread);
   });
 
@@ -69,7 +40,37 @@ export function registerForumHandlers(client: Client) {
  * Thread create
  * ────────────────────────────────────────────────────────────── */
 
-async function handleThreadCreate(client: Client, thread: AnyThreadChannel) {}
+async function handleThreadCreate(client: Client, thread: AnyThreadChannel) {
+  const announceChannel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
+  if (!announceChannel) {
+    console.error(`Channel with ID ${ANNOUNCE_CHANNEL_ID} could not be found`);
+    return;
+  }
+
+  if (announceChannel.type !== ChannelType.GuildText) return;
+
+  await sleep(3000);
+
+  const initialThreadMessage = (await thread.messages.fetch()).first();
+  const initialThreadContent = initialThreadMessage?.content || "";
+  const initialThreadAttachments = initialThreadMessage?.attachments;
+
+  const content = `@everyone\n${buildAnnouncementMessage(thread)}`;
+
+  const embed = buildThreadEmbed(
+    thread,
+    initialThreadContent,
+    pickFirstImageUrl(initialThreadAttachments),
+  );
+
+  await announceChannel.send({
+    content,
+    embeds: [embed],
+    allowedMentions: {
+      parse: ["users", "everyone"],
+    },
+  });
+}
 
 /* ──────────────────────────────────────────────────────────────
  * Thread tag updates (debounce + cooldown)
