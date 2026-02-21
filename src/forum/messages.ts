@@ -55,12 +55,12 @@ export function buildAnnouncementMessage(thread: AnyThreadChannel): string {
   const lines: string[] = [];
 
   lines.push(
-    `Właśnie wleciała ${nowyNowa} **${label}${emoji}**! ${któryKtóra} poprowadzi ${threadOwnerMention}.`,
+    `Właśnie wleciała ${nowyNowa} **${label}${emoji}** ${któryKtóra} poprowadzi ${threadOwnerMention}.`,
   );
 
   if (hasTag(thread, LOOKING_FOR_PLAYERS_TAG_ID)) {
     lines.push(
-      `🎯 Właśnie trwają nabory do ${recruitmentNoun} — aby się zgłosić wejdź na **${threadLink}** i napisz *"Zgłaszam się!"*`,
+      `🎯 Aktualnie trwają nabory do ${recruitmentNoun} — aby się zgłosić wejdź na **${threadLink}** i napisz *"Zgłaszam się!"*`,
     );
   }
 
@@ -143,11 +143,11 @@ function statusGrammarForKind(kind: ReturnType<typeof getThreadKind>): {
 
 function introGrammarForKind(kind: ReturnType<typeof getThreadKind>): {
   nowyNowa: "nowy" | "nowa";
-  któryKtóra: "który" | "która";
+  któryKtóra: ", który" | ", którą";
 } {
   const masculine = isMasculine(kind);
   return {
     nowyNowa: masculine ? "nowy" : "nowa",
-    któryKtóra: masculine ? "który" : "która",
+    któryKtóra: masculine ? ", który" : ", którą",
   };
 }
